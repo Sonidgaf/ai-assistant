@@ -44,5 +44,5 @@ async def main():
                msg("привет"), msg("/stats")]:
         await dp.feed_update(bot, up)
     for s in sent:
-        if s[1]: print(s[0], "|", s[1][:90].replace("\n", " "))
+        print(s[0], "|", (s[1] or "")[:90].replace("\n", " "))
 asyncio.run(main())

@@ -1,13 +1,17 @@
+from pathlib import Path
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from bot.db import Session, get_or_create_user
 from bot.keyboards import choice, main_menu
 
 router = Router()
+
+WELCOME_STICKER = Path(__file__).resolve().parent.parent / "assets" / "welcome_sticker.webp"
 
 BUSINESS_TYPES = ["Товары", "Услуги", "Инфопродукты", "Эксперт / блогер", "Другое"]
 TONES = ["Дружелюбный", "Экспертный", "Дерзкий"]
@@ -23,6 +27,7 @@ class Onboarding(StatesGroup):
 
 async def start_onboarding(message: Message, state: FSMContext) -> None:
     await state.set_state(Onboarding.business_type)
+    await message.answer_sticker(FSInputFile(WELCOME_STICKER))
     await message.answer(
         "👋 <b>Привет! Я ваш AI-маркетолог.</b>\n\n"
         "Помогу с постами, рекламой, контент-планом и разбором конкурентов.\n"
@@ -38,6 +43,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     async with Session() as session:
         user = await get_or_create_user(session, message.from_user.id, message.from_user.username)
     if user.onboarded:
+        await message.answer_sticker(FSInputFile(WELCOME_STICKER))
         await message.answer("👋 <b>С возвращением!</b>\n\n👇 Что делаем?", reply_markup=main_menu())
     else:
         await start_onboarding(message, state)
