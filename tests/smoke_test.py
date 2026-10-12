@@ -15,9 +15,11 @@ class FakeBot(Bot):
         sent.append((type(method).__name__, getattr(method, "text", None)))
         return True
 
-async def fake_ask(system, messages):
+async def fake_ask(system, messages, max_tokens=800):
     assert "Тон бренда: Экспертный" in system, system
-    return f"ОТВЕТ на: {messages[-1]['content']} (история {len(messages)})"
+    mode = "ПОДРОБНО" if "ПОДРОБНО" in system else "КОРОТКО"
+    # модель может прислать «<» и **markdown**: бот должен это пережить
+    return f"🔥 **{mode}** ответ на: {messages[-1]['content']} (история {len(messages)}) 5 < 7 <b>ok</b>"
 llm.ask = fake_ask
 
 u = User(id=1, is_bot=False, first_name="R")
@@ -33,10 +35,12 @@ def cb(data):
 
 async def main():
     await init_db()
-    bot = FakeBot("123:ABC"); dp = Dispatcher()
+    from aiogram.client.default import DefaultBotProperties
+    bot = FakeBot("123:ABC", default=DefaultBotProperties(parse_mode="HTML")); dp = Dispatcher()
     dp.include_routers(admin.router, onboarding.router, scenarios.router)
     for up in [msg("/start"), cb("bt:1"), msg("Кофейня в Казани"), msg("Студенты 18-25"), msg("Telegram, VK"),
-               cb("tone:1"), cb("sc:competitors"), msg("t.me/coffee_rival"), cb("act:shorter"), cb("act:menu"),
+               cb("tone:1"), cb("sc:competitors"), msg("t.me/coffee_rival"), cb("act:more"), cb("act:menu"),
+               cb("sc:post"), cb("ex:0"), cb("act:rewrite"), cb("act:menu"),
                msg("привет"), msg("/stats")]:
         await dp.feed_update(bot, up)
     for s in sent:

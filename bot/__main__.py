@@ -2,6 +2,8 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from bot.config import settings
 from bot.db import init_db
@@ -11,7 +13,7 @@ from bot.handlers import admin, onboarding, scenarios
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     await init_db()
-    bot = Bot(settings.bot_token)
+    bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     # порядок важен: scenarios содержит общий обработчик текста, он должен быть последним
     dp.include_routers(admin.router, onboarding.router, scenarios.router)
