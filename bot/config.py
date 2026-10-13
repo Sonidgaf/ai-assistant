@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///bot.db"
     free_requests: int = 10
     admin_ids: str = ""
+    vk_token: str = ""
+    web_search: bool = True  # поиск в интернете через OpenRouter, ~0.02 $ за запрос
+    web_results: int = 5
+    fresh_days: int = 183  # насколько свежими должны быть данные (≈6 месяцев)  # сервисный ключ VK-приложения, нужен для анализа VK-сообществ
 
     @property
     def admins(self) -> set[int]:

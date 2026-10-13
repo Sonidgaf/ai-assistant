@@ -5,7 +5,7 @@ os.environ.update(BOT_TOKEN="123:ABC", LLM_API_KEY="x", DATABASE_URL="sqlite+aio
 from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update, Message, User, Chat, CallbackQuery
-from bot import llm
+from bot import competitors, llm
 from bot.db import init_db
 from bot.handlers import admin, onboarding, scenarios
 
@@ -15,12 +15,19 @@ class FakeBot(Bot):
         sent.append((type(method).__name__, getattr(method, "text", None)))
         return True
 
-async def fake_ask(system, messages, max_tokens=800):
+async def fake_ask(system, messages, max_tokens=800, web=False):
+    assert "Сегодня " in system and "4–6 месяцев" in system
+    web_calls.append(web)
     assert "Тон бренда: Экспертный" in system, system
     mode = "ПОДРОБНО" if "ПОДРОБНО" in system else "КОРОТКО"
     # модель может прислать «<» и **markdown**: бот должен это пережить
     return f"🔥 **{mode}** ответ на: {messages[-1]['content']} (история {len(messages)}) 5 < 7 <b>ok</b>"
 llm.ask = fake_ask
+web_calls = []
+
+async def fake_collect(sources):
+    return "=== telegram: coffee_rival ===\nПодписчики: 5K"
+competitors.collect = fake_collect
 
 u = User(id=1, is_bot=False, first_name="R")
 c = Chat(id=1, type="private")
@@ -46,3 +53,6 @@ async def main():
     for s in sent:
         print(s[0], "|", (s[1] or "")[:90].replace("\n", " "))
 asyncio.run(main())
+# анализ конкурентов и «Подробнее» ищут в интернете, пост пишется без поиска
+assert web_calls == [True, True, False, False], web_calls
+assert any("Изучаю конкурентов: coffee_rival" in (t or "") for _, t in sent)
