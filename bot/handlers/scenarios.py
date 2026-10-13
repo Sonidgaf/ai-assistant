@@ -1,13 +1,14 @@
 import logging
+from datetime import date
 
 from aiogram import F, Router
 from aiogram.enums import ChatAction
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, LinkPreviewOptions, Message
 
-from bot import llm
+from bot import competitors, llm
 from bot.db import Session, get_or_create_user
 from bot.formatting import sanitize, split, strip_tags
 from bot.keyboards import after_answer, examples, main_menu
@@ -17,6 +18,7 @@ router = Router()
 log = logging.getLogger(__name__)
 
 HISTORY_LIMIT = 10  # сообщений диалога, которые помним внутри сценария
+NO_PREVIEW = LinkPreviewOptions(is_disabled=True)  # ссылки на источники не раздувают ответ превью
 
 
 class Chat(StatesGroup):
@@ -64,7 +66,22 @@ async def rewrite(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(Chat.active, F.text)
 async def scenario_message(message: Message, state: FSMContext) -> None:
-    await run_llm(message, message.from_user.id, message.from_user.username, state, message.text, long=False)
+    text = message.text
+    if (await state.get_data()).get("scenario") == "competitors":
+        text = await with_competitor_data(message, text)
+    await run_llm(message, message.from_user.id, message.from_user.username, state, text, long=False)
+
+
+async def with_competitor_data(message: Message, text: str) -> str:
+    """Если в сообщении есть ссылки на конкурентов, дописывает к нему собранные с них данные."""
+    sources = competitors.find_sources(text)
+    if not sources:
+        return text
+    names = ", ".join(sanitize(s.target) for s in sources)
+    await message.answer(f"🔎 Изучаю конкурентов: {names}\n<i>Это займёт до 20 секунд…</i>")
+    await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+    data = await competitors.collect(sources)
+    return f"{text}\n\nДанные, которые бот собрал с открытых страниц конкурентов:\n{data}"
 
 
 @router.message(F.text)
@@ -85,7 +102,7 @@ async def run_llm(
         data = await state.get_data()
         scenario = SCENARIOS[data["scenario"]]
         system = "\n\n".join([
-            BASE_PROMPT.format(profile=user.profile_text()),
+            BASE_PROMPT.format(profile=user.profile_text(), today=f"{date.today():%d.%m.%Y}"),
             f"Задача: {scenario.instruction}",
             LONG_MODE if long else SHORT_MODE,
         ])
@@ -93,7 +110,7 @@ async def run_llm(
 
         await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
         try:
-            answer = await llm.ask(system, history, max_tokens=2500 if long else 800)
+            answer = await llm.ask(system, history, max_tokens=2500 if long else 800, web=scenario.web)
         except Exception:
             log.exception("LLM request failed")
             await message.answer("😔 Не получилось получить ответ, попробуйте ещё раз через минуту.")
@@ -112,7 +129,7 @@ async def send_answer(message: Message, answer: str, keyboard: InlineKeyboardMar
     for i, chunk in enumerate(chunks):
         markup = keyboard if i == len(chunks) - 1 else None
         try:
-            await message.answer(chunk, reply_markup=markup)
+            await message.answer(chunk, reply_markup=markup, link_preview_options=NO_PREVIEW)
         except TelegramBadRequest:
             # модель сломала разметку: отправляем тем же текстом, но без тегов
             await message.answer(strip_tags(chunk), reply_markup=markup, parse_mode=None)
